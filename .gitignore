@@ -1,0 +1,8 @@
+node_modules/
+.env
+.fortytwo-token.json
+.review-notifications.json
+.review-notification-settings.json
+.review-snapshot.json
+.DS_Store
+npm-debug.log*

@@ -1,0 +1,30 @@
+{
+  "name": "slot_manager",
+  "version": "1.0.0",
+  "description": "42のSlotをDiscordから管理するための個人用Botです。",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "commands:register": "node src/discord/registerCommands.js",
+    "auth:42": "node src/fortyTwo/authenticate.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hiratannnnnn/slot_manager.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/hiratannnnnn/slot_manager/issues"
+  },
+  "homepage": "https://github.com/hiratannnnnn/slot_manager#readme",
+  "dependencies": {
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.4.2"
+  }
+}
