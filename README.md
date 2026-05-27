@@ -65,6 +65,7 @@ npm start
 - `/slots`: 自分の42 Slot一覧を表示
 - `/create-slot`: 自分のSlotを作成
 - `/delete-slot`: 指定した時刻範囲に含まれる自分のSlotを削除
+- `/delete-today-slots`: 現在時刻から翌朝4時までに含まれる自分のSlotをすべて削除
 - `/register-review-notify`: 実行したチャンネルで、実行したユーザー宛てのレビュー通知を有効化
 
 `/create-slot` と `/delete-slot` の時刻は `YYYY-MM-DD HH:mm` 形式なら日本時間として扱います。

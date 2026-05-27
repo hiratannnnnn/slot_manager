@@ -38,6 +38,9 @@ const commandDefinitions = [
         .setRequired(true),
     ),
   new SlashCommandBuilder()
+    .setName('delete-today-slots')
+    .setDescription('現在時刻から翌朝4時までの自分のSlotをすべて削除します'),
+  new SlashCommandBuilder()
     .setName('register-review-notify')
     .setDescription('このチャンネルで自分宛てのレビュー通知を有効にします'),
 ];

@@ -6,6 +6,7 @@ const { SlotService } = require('./application/SlotService');
 const { UserOAuthTokenProvider } = require('./fortyTwo/UserOAuthTokenProvider');
 const { formatSlots } = require('./discord/formatSlots');
 const { parseSlotDateTime } = require('./application/parseSlotDateTime');
+const { getTodaySlotDeletionRange } = require('./application/getTodaySlotDeletionRange');
 const { ReviewNotificationStore } = require('./notifications/ReviewNotificationStore');
 const { ReviewNotificationSettingsStore } = require('./notifications/ReviewNotificationSettingsStore');
 const { ReviewSnapshotStore } = require('./notifications/ReviewSnapshotStore');
@@ -76,6 +77,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       await interaction.editReply(`Slotを削除しました。\n\n${formatSlots(deletedSlots)}`);
+      return;
+    }
+
+    if (interaction.commandName === 'delete-today-slots') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const { beginAt, endAt } = getTodaySlotDeletionRange();
+      const deletedSlots = await getSlotService().deleteSlotsByRange({ beginAt, endAt });
+
+      if (deletedSlots.length === 0) {
+        await interaction.editReply('現在時刻から翌朝4時までに削除対象のSlotはありませんでした。');
+        return;
+      }
+
+      await interaction.editReply(`現在時刻から翌朝4時までのSlotを削除しました。\n\n${formatSlots(deletedSlots)}`);
       return;
     }
 

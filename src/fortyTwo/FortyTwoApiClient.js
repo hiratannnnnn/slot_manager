@@ -1,14 +1,21 @@
+const DEFAULT_MAX_RETRIES = 5;
+const DEFAULT_RETRY_DELAY_MILLISECONDS = 30 * 1000;
+
 class FortyTwoApiClient {
   constructor({ tokenProvider, baseUrl = 'https://api.intra.42.fr/v2' }) {
     this.tokenProvider = tokenProvider;
     this.baseUrl = baseUrl;
   }
 
-  async listMySlots({ futureOnly = true, pageSize = 100 } = {}) {
+  async listMySlots({ futureOnly = true, pageSize = 100, pageNumber } = {}) {
     const params = new URLSearchParams({
       sort: 'begin_at',
       'page[size]': String(pageSize),
     });
+
+    if (pageNumber) {
+      params.set('page[number]', String(pageNumber));
+    }
 
     if (futureOnly) {
       params.set('filter[future]', 'true');
@@ -42,23 +49,33 @@ class FortyTwoApiClient {
 
   async request(path, options = {}) {
     const accessToken = await this.tokenProvider.getAccessToken();
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/json',
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-        ...options.headers,
-      },
-    });
 
-    const data = await readJson(response);
+    for (let attempt = 0; attempt <= DEFAULT_MAX_RETRIES; attempt += 1) {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        ...options,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+          ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+          ...options.headers,
+        },
+      });
 
-    if (!response.ok) {
+      const data = await readJson(response);
+
+      if (response.ok) {
+        return data;
+      }
+
+      if (response.status === 429 && attempt < DEFAULT_MAX_RETRIES) {
+        await sleep(getRetryDelayMilliseconds(response, attempt));
+        continue;
+      }
+
       throw new Error(`42 API request failed: ${response.status} ${formatApiError(data)}`);
     }
 
-    return data;
+    throw new Error('42 API request failed: retry limit exceeded');
   }
 }
 
@@ -80,6 +97,32 @@ function formatApiError(data) {
   }
 
   return data.message || data.error_description || data.error || JSON.stringify(data);
+}
+
+function getRetryDelayMilliseconds(response, attempt) {
+  const retryAfter = response.headers.get('retry-after');
+
+  if (retryAfter) {
+    const retryAfterSeconds = Number(retryAfter);
+
+    if (!Number.isNaN(retryAfterSeconds)) {
+      return retryAfterSeconds * 1000;
+    }
+
+    const retryAt = new Date(retryAfter).getTime();
+
+    if (!Number.isNaN(retryAt)) {
+      return Math.max(retryAt - Date.now(), 0);
+    }
+  }
+
+  return DEFAULT_RETRY_DELAY_MILLISECONDS * (attempt + 1);
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
 
 module.exports = {

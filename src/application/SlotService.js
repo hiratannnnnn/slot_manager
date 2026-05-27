@@ -1,3 +1,5 @@
+const DELETE_INTERVAL_MILLISECONDS = 750;
+
 class SlotService {
   constructor({ fortyTwoApiClient }) {
     this.fortyTwoApiClient = fortyTwoApiClient;
@@ -26,7 +28,7 @@ class SlotService {
   }
 
   async deleteSlotsByRange({ beginAt, endAt }) {
-    const slots = await this.fortyTwoApiClient.listMySlots({ pageSize: 100 });
+    const slots = await this.listAllMySlotsForDeletion();
     const beginTime = new Date(beginAt).getTime();
     const endTime = new Date(endAt).getTime();
     const targetSlots = slots
@@ -39,12 +41,36 @@ class SlotService {
       })
       .sort((a, b) => new Date(a.beginAt) - new Date(b.beginAt));
 
-    for (const slot of targetSlots) {
+    for (const [index, slot] of targetSlots.entries()) {
+      if (index > 0) {
+        await sleep(DELETE_INTERVAL_MILLISECONDS);
+      }
+
       await this.fortyTwoApiClient.deleteSlot(slot.id);
     }
 
     return targetSlots;
   }
+
+  async listAllMySlotsForDeletion() {
+    const pageSize = 100;
+    const slots = [];
+
+    for (let pageNumber = 1; ; pageNumber += 1) {
+      const page = await this.fortyTwoApiClient.listMySlots({ pageSize, pageNumber });
+      slots.push(...page);
+
+      if (page.length < pageSize) {
+        return slots;
+      }
+    }
+  }
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
 
 function formatSlot(slot) {
