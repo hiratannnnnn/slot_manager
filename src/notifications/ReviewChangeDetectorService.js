@@ -9,6 +9,7 @@ class ReviewChangeDetectorService {
     snapshotStore,
     channelId,
     userId,
+    authFailureNotifier,
     intervalSeconds = 300,
   }) {
     this.discordClient = discordClient;
@@ -17,6 +18,7 @@ class ReviewChangeDetectorService {
     this.snapshotStore = snapshotStore;
     this.channelId = channelId;
     this.userId = userId;
+    this.authFailureNotifier = authFailureNotifier;
     this.intervalSeconds = intervalSeconds;
     this.interval = null;
     this.isChecking = false;
@@ -49,14 +51,16 @@ class ReviewChangeDetectorService {
 
     this.isChecking = true;
 
-    try {
-      const settings = this.getSettings();
+    const settings = this.getSettings();
 
+    try {
       if (!settings) {
         return;
       }
 
       const currentSnapshot = await this.createSnapshot();
+      this.authFailureNotifier?.markRecovered();
+
       const previousSnapshot = this.snapshotStore.read();
 
       if (!previousSnapshot) {
@@ -83,6 +87,12 @@ class ReviewChangeDetectorService {
       }
 
       this.snapshotStore.write(currentSnapshot);
+    } catch (error) {
+      if (settings && await this.authFailureNotifier?.notifyIfAuthenticationError(error, settings)) {
+        return;
+      }
+
+      throw error;
     } finally {
       this.isChecking = false;
     }

@@ -5,13 +5,19 @@ const { FortyTwoApiClient } = require('./fortyTwo/FortyTwoApiClient');
 const { SlotService } = require('./application/SlotService');
 const { UserOAuthTokenProvider } = require('./fortyTwo/UserOAuthTokenProvider');
 const { formatSlots } = require('./discord/formatSlots');
+const { formatSlotRanges } = require('./discord/formatSlotRanges');
+const { formatUserError } = require('./discord/formatUserError');
 const { parseSlotDateTime } = require('./application/parseSlotDateTime');
+const { parseSlotDateTimeRange } = require('./application/parseSlotDateTimeRange');
 const { getTodaySlotDeletionRange } = require('./application/getTodaySlotDeletionRange');
+const { buildReviewSlotRanges } = require('./application/buildReviewSlotRanges');
+const { groupSlotsIntoRanges } = require('./application/groupSlotsIntoRanges');
 const { ReviewNotificationStore } = require('./notifications/ReviewNotificationStore');
 const { ReviewNotificationSettingsStore } = require('./notifications/ReviewNotificationSettingsStore');
 const { ReviewSnapshotStore } = require('./notifications/ReviewSnapshotStore');
 const { ReviewChangeDetectorService } = require('./notifications/ReviewChangeDetectorService');
 const { ReviewReminderService } = require('./notifications/ReviewReminderService');
+const { AuthFailureNotifier } = require('./notifications/AuthFailureNotifier');
 
 const env = getDiscordEnv();
 let slotService;
@@ -44,6 +50,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
+    if (interaction.commandName === 'view-slots') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const slots = await getSlotService().listMySlots();
+      const ranges = groupSlotsIntoRanges(slots);
+      await interaction.editReply(formatSlotRanges(ranges));
+      return;
+    }
+
     if (interaction.commandName === 'create-slot') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const beginAt = parseSlotDateTime(interaction.options.getString('begin_at', true));
@@ -55,7 +69,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       const slots = await getSlotService().createSlot({ beginAt, endAt });
-      await interaction.editReply(`Slotを作成しました。\n\n${formatSlots(slots)}`);
+      await interaction.editReply(`Slotを作成しました。\n\n${formatSlotRanges(groupSlotsIntoRanges(slots))}`);
+      return;
+    }
+
+    if (interaction.commandName === 'open-slot') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const beginAt = parseSlotDateTime(interaction.options.getString('begin_at', true));
+      const endAt = parseSlotDateTime(interaction.options.getString('end_at', true));
+
+      if (new Date(beginAt) >= new Date(endAt)) {
+        await interaction.editReply('開始時刻は終了時刻より前にしてください。');
+        return;
+      }
+
+      const ranges = buildReviewSlotRanges({ beginAt, endAt });
+
+      if (ranges.length === 0) {
+        await interaction.editReply('指定範囲内に75分のレビューSlotを作成できる時間がありません。');
+        return;
+      }
+
+      const slots = await getSlotService().openReviewSlots(ranges);
+      await interaction.editReply(`Slotを作成しました。作成リクエスト数: ${ranges.length}\n\n${formatSlotRanges(groupSlotsIntoRanges(slots))}`);
       return;
     }
 
@@ -69,7 +105,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      const deletedSlots = await getSlotService().deleteSlotsByRange({ beginAt, endAt });
+      const deletedSlots = await getSlotService().closeSlotsByRange({ beginAt, endAt });
 
       if (deletedSlots.length === 0) {
         await interaction.editReply('指定範囲に削除対象のSlotが見つかりませんでした。');
@@ -80,10 +116,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
+    if (interaction.commandName === 'close-slots') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const { beginAt, endAt } = parseSlotDateTimeRange({
+        beginInput: interaction.options.getString('begin_at', true),
+        endInput: interaction.options.getString('end_at', true),
+      });
+
+      if (new Date(beginAt) >= new Date(endAt)) {
+        await interaction.editReply('開始時刻は終了時刻より前にしてください。');
+        return;
+      }
+
+      const deletedSlots = await getSlotService().closeSlotsByRange({ beginAt, endAt });
+
+      if (deletedSlots.length === 0) {
+        await interaction.editReply('指定範囲に閉じるSlotが見つかりませんでした。');
+        return;
+      }
+
+      await interaction.editReply(`Slotを閉じました。\n\n${formatSlots(deletedSlots)}`);
+      return;
+    }
+
     if (interaction.commandName === 'delete-today-slots') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const { beginAt, endAt } = getTodaySlotDeletionRange();
-      const deletedSlots = await getSlotService().deleteSlotsByRange({ beginAt, endAt });
+      const deletedSlots = await getSlotService().closeSlotsByRange({ beginAt, endAt });
 
       if (deletedSlots.length === 0) {
         await interaction.editReply('現在時刻から翌朝4時までに削除対象のSlotはありませんでした。');
@@ -114,7 +173,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   } catch (error) {
     console.error(error);
 
-    const message = '処理中にエラーが発生しました。Botのログを確認してください。';
+    const message = formatUserError(error) || '処理中にエラーが発生しました。Botのログを確認してください。';
 
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply(message);
@@ -148,6 +207,8 @@ function createFortyTwoApiClient() {
 }
 
 function startReviewNotifications() {
+  const authFailureNotifier = new AuthFailureNotifier({ discordClient: client });
+
   const reminderService = new ReviewReminderService({
     discordClient: client,
     slotService: getSlotService(),
@@ -155,6 +216,7 @@ function startReviewNotifications() {
     settingsStore: reviewNotificationSettingsStore,
     channelId: env.notifyChannelId,
     userId: env.notifyUserId,
+    authFailureNotifier,
     leadMinutes: env.reviewNotifyLeadMinutes,
     intervalSeconds: env.reviewNotifyIntervalSeconds,
   });
@@ -168,6 +230,7 @@ function startReviewNotifications() {
     snapshotStore: new ReviewSnapshotStore(),
     channelId: env.notifyChannelId,
     userId: env.notifyUserId,
+    authFailureNotifier,
     intervalSeconds: env.reviewChangeIntervalSeconds,
   });
 

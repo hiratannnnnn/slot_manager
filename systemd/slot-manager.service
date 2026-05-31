@@ -1,0 +1,15 @@
+[Unit]
+Description=slot_manager Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/slot_manager
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/env npm start
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

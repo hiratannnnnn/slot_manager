@@ -1,4 +1,5 @@
 const DELETE_INTERVAL_MILLISECONDS = 750;
+const CREATE_INTERVAL_MILLISECONDS = 750;
 
 class SlotService {
   constructor({ fortyTwoApiClient }) {
@@ -13,21 +14,45 @@ class SlotService {
 
   async createSlot({ beginAt, endAt }) {
     const me = await this.fortyTwoApiClient.getMe();
-    const result = await this.fortyTwoApiClient.createSlot({
-      userId: me.id,
-      beginAt,
-      endAt,
-    });
-    const slots = Array.isArray(result) ? result : [result];
+    const slots = await this.createSlotForUser({ userId: me.id, beginAt, endAt });
 
     return slots.map(formatSlot);
   }
 
-  async deleteSlot(slotId) {
-    await this.fortyTwoApiClient.deleteSlot(slotId);
+  async openReviewSlots(ranges) {
+    const me = await this.fortyTwoApiClient.getMe();
+    const createdSlots = [];
+
+    await sleep(CREATE_INTERVAL_MILLISECONDS);
+
+    for (const [index, range] of ranges.entries()) {
+      if (index > 0) {
+        await sleep(CREATE_INTERVAL_MILLISECONDS);
+      }
+
+      const slots = await this.createSlotForUser({
+        userId: me.id,
+        beginAt: range.beginAt,
+        endAt: range.endAt,
+      });
+
+      createdSlots.push(...slots);
+    }
+
+    return createdSlots.map(formatSlot);
   }
 
-  async deleteSlotsByRange({ beginAt, endAt }) {
+  async createSlotForUser({ userId, beginAt, endAt }) {
+    const result = await this.fortyTwoApiClient.createSlot({
+      userId,
+      beginAt,
+      endAt,
+    });
+
+    return Array.isArray(result) ? result : [result];
+  }
+
+  async closeSlotsByRange({ beginAt, endAt }) {
     const slots = await this.listAllMySlotsForDeletion();
     const beginTime = new Date(beginAt).getTime();
     const endTime = new Date(endAt).getTime();

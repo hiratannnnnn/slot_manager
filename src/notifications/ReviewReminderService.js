@@ -9,6 +9,7 @@ class ReviewReminderService {
     settingsStore,
     channelId,
     userId,
+    authFailureNotifier,
     leadMinutes = 30,
     intervalSeconds = 300,
   }) {
@@ -18,6 +19,7 @@ class ReviewReminderService {
     this.settingsStore = settingsStore;
     this.channelId = channelId;
     this.userId = userId;
+    this.authFailureNotifier = authFailureNotifier;
     this.leadMinutes = leadMinutes;
     this.intervalSeconds = intervalSeconds;
     this.interval = null;
@@ -51,14 +53,16 @@ class ReviewReminderService {
 
     this.isChecking = true;
 
-    try {
-      const settings = this.getSettings();
+    const settings = this.getSettings();
 
+    try {
       if (!settings) {
         return;
       }
 
       const slots = await this.slotService.listMySlots();
+      this.authFailureNotifier?.markRecovered();
+
       const reviews = groupBookedSlotsIntoReviews(slots);
       const now = Date.now();
       const leadMilliseconds = this.leadMinutes * 60 * 1000;
@@ -80,6 +84,12 @@ class ReviewReminderService {
         await this.sendReminder(review, settings);
         this.notificationStore.add(notificationKey);
       }
+    } catch (error) {
+      if (settings && await this.authFailureNotifier?.notifyIfAuthenticationError(error, settings)) {
+        return;
+      }
+
+      throw error;
     } finally {
       this.isChecking = false;
     }
