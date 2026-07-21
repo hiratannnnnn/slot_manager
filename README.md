@@ -25,7 +25,7 @@ FORTYTWO_SCOPES=public projects
 レビュー開始前のメンション通知を使う場合は、任意で以下も設定します。
 
 ```env
-REVIEW_NOTIFY_LEAD_MINUTES=30
+REVIEW_NOTIFY_LEAD_MINUTES=42
 REVIEW_NOTIFY_INTERVAL_SECONDS=60
 REVIEW_CHANGE_INTERVAL_SECONDS=300
 ```
@@ -81,7 +81,7 @@ end_at: 2026-05-28 03:45
 
 このBotの主目的は、自分が評価者として出すSlotをDiscordから管理することです。
 
-通知機能として、bookedになっている自分のSlotの開始時刻が近づいたら、登録されたチャンネルで登録ユーザーをメンションできます。また、前回チェック時のレビュー状態と比較して、新しいレビューやキャンセルされたレビューも通知します。
+通知機能として、bookedになっている自分のSlotの開始時刻が近づいたら、登録されたチャンネルで登録ユーザーをメンションできます。開始前通知は `REVIEW_NOTIFY_LEAD_MINUTES`（既定42分）と開始5分前に、それぞれ1回ずつ送信します。また、前回チェック時のレビュー状態と比較して、新しいレビューやキャンセルされたレビューも通知します。
 
 42 APIでは1件のレビューが15分単位の連続Slotとして返ることがあるため、連続したbooked Slotは1つのレビューとしてまとめて扱います。
 

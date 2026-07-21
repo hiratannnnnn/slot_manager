@@ -19,7 +19,7 @@ function getDiscordEnv() {
     discordGuildId: process.env.DISCORD_GUILD_ID,
     notifyChannelId: process.env.DISCORD_NOTIFY_CHANNEL_ID,
     notifyUserId: process.env.DISCORD_NOTIFY_USER_ID,
-    reviewNotifyLeadMinutes: readIntegerEnv('REVIEW_NOTIFY_LEAD_MINUTES', 30),
+    reviewNotifyLeadMinutes: readIntegerEnv('REVIEW_NOTIFY_LEAD_MINUTES', 42),
     reviewNotifyIntervalSeconds: readIntegerEnv('REVIEW_NOTIFY_INTERVAL_SECONDS', 60),
     reviewChangeIntervalSeconds: readIntegerEnv('REVIEW_CHANGE_INTERVAL_SECONDS', 300),
   };

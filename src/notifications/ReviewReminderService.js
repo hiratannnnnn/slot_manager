@@ -1,5 +1,6 @@
 const { groupBookedSlotsIntoReviews } = require('../application/groupBookedSlotsIntoReviews');
 const { formatReview } = require('../discord/formatReview');
+const FINAL_REMINDER_LEAD_MINUTES = 5;
 
 class ReviewReminderService {
   constructor({
@@ -10,7 +11,7 @@ class ReviewReminderService {
     channelId,
     userId,
     authFailureNotifier,
-    leadMinutes = 30,
+    leadMinutes = 42,
     intervalSeconds = 300,
   }) {
     this.discordClient = discordClient;
@@ -65,24 +66,35 @@ class ReviewReminderService {
 
       const reviews = groupBookedSlotsIntoReviews(slots);
       const now = Date.now();
-      const leadMilliseconds = this.leadMinutes * 60 * 1000;
-
       for (const review of reviews) {
         const beginTime = new Date(review.beginAt).getTime();
-        const millisecondsUntilBegin = beginTime - now;
 
-        if (millisecondsUntilBegin <= 0 || millisecondsUntilBegin > leadMilliseconds) {
-          continue;
+        for (const reminderLeadMinutes of this.getReminderLeadMinutes()) {
+          const millisecondsUntilBegin = beginTime - now;
+          const leadMilliseconds = reminderLeadMinutes * 60 * 1000;
+
+          if (millisecondsUntilBegin <= 0 || millisecondsUntilBegin > leadMilliseconds) {
+            continue;
+          }
+
+          // A bot restarted within the final five minutes should send only the final reminder.
+          if (reminderLeadMinutes === this.leadMinutes
+            && reminderLeadMinutes > FINAL_REMINDER_LEAD_MINUTES
+            && millisecondsUntilBegin <= FINAL_REMINDER_LEAD_MINUTES * 60 * 1000) {
+            continue;
+          }
+
+          const notificationKey = `review-starting:${review.id}:${reminderLeadMinutes}m`;
+          const legacyNotificationKey = `review-starting:${review.id}`;
+
+          if (this.notificationStore.has(notificationKey)
+            || (reminderLeadMinutes === this.leadMinutes && this.notificationStore.has(legacyNotificationKey))) {
+            continue;
+          }
+
+          await this.sendReminder(review, settings, reminderLeadMinutes);
+          this.notificationStore.add(notificationKey);
         }
-
-        const notificationKey = `review-starting:${review.id}`;
-
-        if (this.notificationStore.has(notificationKey)) {
-          continue;
-        }
-
-        await this.sendReminder(review, settings);
-        this.notificationStore.add(notificationKey);
       }
     } catch (error) {
       if (settings && await this.authFailureNotifier?.notifyIfAuthenticationError(error, settings)) {
@@ -95,7 +107,7 @@ class ReviewReminderService {
     }
   }
 
-  async sendReminder(review, settings) {
+  async sendReminder(review, settings, reminderLeadMinutes) {
     const channel = await this.discordClient.channels.fetch(settings.channelId);
 
     if (!channel || !channel.isTextBased()) {
@@ -105,11 +117,15 @@ class ReviewReminderService {
     const mention = `<@${settings.userId}>`;
 
     await channel.send({
-      content: `${mention} レビュー開始が近づいています。\n\n${formatReview(review)}`,
+      content: `${mention} レビュー開始${reminderLeadMinutes}分前です。\n\n${formatReview(review)}`,
       allowedMentions: {
         users: [settings.userId],
       },
     });
+  }
+
+  getReminderLeadMinutes() {
+    return [...new Set([this.leadMinutes, FINAL_REMINDER_LEAD_MINUTES])];
   }
 
   getSettings() {
