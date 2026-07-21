@@ -28,6 +28,23 @@ class FortyTwoApiClient {
     return this.request('/me');
   }
 
+  async listMyScaleTeamsAsCorrected({ futureOnly = true, pageSize = 100, pageNumber } = {}) {
+    const params = new URLSearchParams({
+      sort: 'begin_at',
+      'page[size]': String(pageSize),
+    });
+
+    if (pageNumber) {
+      params.set('page[number]', String(pageNumber));
+    }
+
+    if (futureOnly) {
+      params.set('filter[future]', 'true');
+    }
+
+    return this.request(`/me/scale_teams/as_corrected?${params.toString()}`);
+  }
+
   async createSlot({ userId, beginAt, endAt }) {
     return this.request('/slots', {
       method: 'POST',

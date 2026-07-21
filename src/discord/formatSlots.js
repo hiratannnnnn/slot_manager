@@ -1,3 +1,5 @@
+const { formatDateTime } = require('./formatDateTime');
+
 function formatSlots(slots) {
   if (slots.length === 0) {
     return '表示できるSlotはありません。';
@@ -12,18 +14,6 @@ function formatSlots(slots) {
       return `ID: ${slot.id}\n${beginAt} - ${endAt}\nstatus: ${status}`;
     })
     .join('\n\n');
-}
-
-function formatDateTime(value) {
-  if (!value) {
-    return 'unknown';
-  }
-
-  return new Intl.DateTimeFormat('ja-JP', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-    timeZone: 'Asia/Tokyo',
-  }).format(new Date(value));
 }
 
 module.exports = {

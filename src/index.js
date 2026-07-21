@@ -1,8 +1,10 @@
+const path = require('path');
 const { Client, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
 const { getDiscordEnv, getFortyTwoEnv } = require('./config/env');
 const { FileTokenStore } = require('./fortyTwo/FileTokenStore');
 const { FortyTwoApiClient } = require('./fortyTwo/FortyTwoApiClient');
 const { SlotService } = require('./application/SlotService');
+const { CorrectedReviewService } = require('./application/CorrectedReviewService');
 const { UserOAuthTokenProvider } = require('./fortyTwo/UserOAuthTokenProvider');
 const { formatSlots } = require('./discord/formatSlots');
 const { formatSlotRanges } = require('./discord/formatSlotRanges');
@@ -18,9 +20,11 @@ const { ReviewSnapshotStore } = require('./notifications/ReviewSnapshotStore');
 const { ReviewChangeDetectorService } = require('./notifications/ReviewChangeDetectorService');
 const { ReviewReminderService } = require('./notifications/ReviewReminderService');
 const { AuthFailureNotifier } = require('./notifications/AuthFailureNotifier');
+const { CorrectedReviewNotificationService } = require('./notifications/CorrectedReviewNotificationService');
 
 const env = getDiscordEnv();
 let slotService;
+let correctedReviewService;
 const reviewNotificationSettingsStore = new ReviewNotificationSettingsStore();
 
 const client = new Client({
@@ -208,6 +212,18 @@ function createFortyTwoApiClient() {
   return new FortyTwoApiClient({ tokenProvider });
 }
 
+function getCorrectedReviewService() {
+  if (correctedReviewService) {
+    return correctedReviewService;
+  }
+
+  correctedReviewService = new CorrectedReviewService({
+    fortyTwoApiClient: createFortyTwoApiClient(),
+  });
+
+  return correctedReviewService;
+}
+
 async function startReviewNotifications() {
   const authFailureNotifier = new AuthFailureNotifier({ discordClient: client });
 
@@ -237,6 +253,25 @@ async function startReviewNotifications() {
   });
 
   changeDetectorService.start();
+
+  const correctedReviewNotificationService = new CorrectedReviewNotificationService({
+    discordClient: client,
+    correctedReviewService: getCorrectedReviewService(),
+    notificationStore: new ReviewNotificationStore({
+      filePath: path.resolve(process.cwd(), '.corrected-review-notifications.json'),
+    }),
+    settingsStore: reviewNotificationSettingsStore,
+    snapshotStore: new ReviewSnapshotStore({
+      filePath: path.resolve(process.cwd(), '.corrected-review-snapshot.json'),
+    }),
+    channelId: env.notifyChannelId,
+    userId: env.notifyUserId,
+    authFailureNotifier,
+    leadMinutes: env.reviewNotifyLeadMinutes,
+    intervalSeconds: env.reviewNotifyIntervalSeconds,
+  });
+
+  correctedReviewNotificationService.start();
 
   await sendRestartNotification();
 }

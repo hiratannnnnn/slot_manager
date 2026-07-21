@@ -4,5 +4,7 @@ node_modules/
 .review-notifications.json
 .review-notification-settings.json
 .review-snapshot.json
+.corrected-review-notifications.json
+.corrected-review-snapshot.json
 .DS_Store
 npm-debug.log*
