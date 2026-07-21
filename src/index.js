@@ -29,7 +29,9 @@ const client = new Client({
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
-  startReviewNotifications();
+  startReviewNotifications().catch((error) => {
+    console.error('Failed to start review notifications:', error);
+  });
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -206,7 +208,7 @@ function createFortyTwoApiClient() {
   return new FortyTwoApiClient({ tokenProvider });
 }
 
-function startReviewNotifications() {
+async function startReviewNotifications() {
   const authFailureNotifier = new AuthFailureNotifier({ discordClient: client });
 
   const reminderService = new ReviewReminderService({
@@ -235,4 +237,24 @@ function startReviewNotifications() {
   });
 
   changeDetectorService.start();
+
+  await sendRestartNotification();
+}
+
+async function sendRestartNotification() {
+  const savedSettings = reviewNotificationSettingsStore.read();
+  const channelId = savedSettings?.channelId || env.notifyChannelId;
+
+  if (!channelId) {
+    console.log('Restart notification skipped: no notification channel is configured.');
+    return;
+  }
+
+  const channel = await client.channels.fetch(channelId);
+
+  if (!channel || !channel.isTextBased()) {
+    throw new Error(`Notification channel is not text based: ${channelId}`);
+  }
+
+  await channel.send('slot_managerを再起動しました。レビュー通知を再開しました。');
 }
