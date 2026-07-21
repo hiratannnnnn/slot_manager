@@ -88,7 +88,13 @@ class ReviewReminderService {
           const legacyNotificationKey = `review-starting:${review.id}`;
 
           if (this.notificationStore.has(notificationKey)
-            || (reminderLeadMinutes === this.leadMinutes && this.notificationStore.has(legacyNotificationKey))) {
+            || (reminderLeadMinutes === this.leadMinutes && this.notificationStore.has(legacyNotificationKey))
+            || hasNotifiedReviewWithSharedSlot(
+              this.notificationStore.read().notified,
+              review,
+              reminderLeadMinutes,
+              this.leadMinutes,
+            )) {
             continue;
           }
 
@@ -141,6 +147,47 @@ class ReviewReminderService {
   }
 }
 
+function hasNotifiedReviewWithSharedSlot(
+  notificationKeys,
+  review,
+  reminderLeadMinutes,
+  configuredLeadMinutes,
+) {
+  const currentSlotIds = new Set(review.slotIds.map(String));
+
+  return notificationKeys.some((notificationKey) => {
+    const notifiedSlotIds = getNotifiedSlotIds(
+      notificationKey,
+      reminderLeadMinutes,
+      configuredLeadMinutes,
+    );
+
+    return notifiedSlotIds.some((slotId) => currentSlotIds.has(slotId));
+  });
+}
+
+function getNotifiedSlotIds(notificationKey, reminderLeadMinutes, configuredLeadMinutes) {
+  const prefix = 'review-starting:';
+  const reminderSuffix = `:${reminderLeadMinutes}m`;
+
+  if (!notificationKey.startsWith(prefix)) {
+    return [];
+  }
+
+  const hasReminderSuffix = notificationKey.endsWith(reminderSuffix);
+  const hasAnotherReminderSuffix = /:\d+m$/.test(notificationKey);
+  const isCompatibleLegacyKey = reminderLeadMinutes === configuredLeadMinutes
+    && !hasAnotherReminderSuffix;
+
+  if (!hasReminderSuffix && !isCompatibleLegacyKey) {
+    return [];
+  }
+
+  const slotIds = notificationKey.slice(prefix.length).split(':', 1)[0];
+  return slotIds.split('-').filter(Boolean);
+}
+
 module.exports = {
   ReviewReminderService,
+  hasNotifiedReviewWithSharedSlot,
 };
