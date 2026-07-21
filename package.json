@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "commands:register": "node src/discord/registerCommands.js",
-    "auth:42": "node src/fortyTwo/authenticate.js"
+    "auth:42": "node src/fortyTwo/authenticate.js",
+    "test": "node --test"
   },
   "repository": {
     "type": "git",

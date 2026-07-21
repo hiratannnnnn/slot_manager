@@ -68,7 +68,11 @@ class ReviewChangeDetectorService {
         return;
       }
 
-      const changes = findReviewChanges(previousSnapshot.reviews, currentSnapshot.reviews);
+      const changes = findReviewChanges(
+        previousSnapshot.reviews,
+        currentSnapshot.reviews,
+        currentSnapshot.checkedAt,
+      );
 
       for (const review of changes.created) {
         await this.sendChangeNotification({
@@ -136,18 +140,40 @@ class ReviewChangeDetectorService {
   }
 }
 
-function findReviewChanges(previousReviews, currentReviews) {
-  const previousById = mapById(previousReviews);
-  const currentById = mapById(currentReviews);
+function findReviewChanges(previousReviews, currentReviews, checkedAt) {
+  const checkedAtTime = new Date(checkedAt).getTime();
+  const previousReviewsWithSharedSlots = new Set();
+  const currentReviewsWithSharedSlots = new Set();
+  const previousReviewIndexesBySlotId = new Map();
+
+  previousReviews.forEach((review, reviewIndex) => {
+    for (const slotId of review.slotIds) {
+      const reviewIndexes = previousReviewIndexesBySlotId.get(slotId) || [];
+      reviewIndexes.push(reviewIndex);
+      previousReviewIndexesBySlotId.set(slotId, reviewIndexes);
+    }
+  });
+
+  currentReviews.forEach((review, reviewIndex) => {
+    for (const slotId of review.slotIds) {
+      for (const previousReviewIndex of previousReviewIndexesBySlotId.get(slotId) || []) {
+        previousReviewsWithSharedSlots.add(previousReviewIndex);
+        currentReviewsWithSharedSlots.add(reviewIndex);
+      }
+    }
+  });
 
   return {
-    created: currentReviews.filter((review) => !previousById.has(review.id)),
-    cancelled: previousReviews.filter((review) => !currentById.has(review.id)),
+    // A review can gain or lose a contiguous 15-minute slot between polls. Its
+    // derived ID then changes, but a shared slot proves that it is the same review.
+    created: currentReviews.filter((review, index) => !currentReviewsWithSharedSlots.has(index)),
+    // Once a review has begun, its slots naturally disappear from the API's
+    // future-only response. Only a disappearance before the start is a cancellation.
+    cancelled: previousReviews.filter((review, index) => (
+      !previousReviewsWithSharedSlots.has(index)
+      && new Date(review.beginAt).getTime() > checkedAtTime
+    )),
   };
-}
-
-function mapById(reviews) {
-  return new Map(reviews.map((review) => [review.id, review]));
 }
 
 module.exports = {
