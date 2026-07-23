@@ -9,6 +9,7 @@ class UserOAuthTokenProvider {
     this.clientSecret = clientSecret;
     this.tokenStore = tokenStore;
     this.tokenUrl = tokenUrl;
+    this.refreshPromise = null;
   }
 
   async getAccessToken() {
@@ -26,10 +27,22 @@ class UserOAuthTokenProvider {
       throw new Error('42 user token is expired and has no refresh token. Run `npm run auth:42` again.');
     }
 
-    const refreshedToken = await this.refreshAccessToken(token.refreshToken);
-    this.tokenStore.write(refreshedToken);
+    if (!this.refreshPromise) {
+      this.refreshPromise = this.refreshAndStore(token.refreshToken);
+    }
 
-    return refreshedToken.accessToken;
+    try {
+      const refreshedToken = await this.refreshPromise;
+      return refreshedToken.accessToken;
+    } finally {
+      this.refreshPromise = null;
+    }
+  }
+
+  async refreshAndStore(refreshToken) {
+    const refreshedToken = await this.refreshAccessToken(refreshToken);
+    this.tokenStore.write(refreshedToken);
+    return refreshedToken;
   }
 
   async refreshAccessToken(refreshToken) {

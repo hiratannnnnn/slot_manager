@@ -25,6 +25,7 @@ const { CorrectedReviewNotificationService } = require('./notifications/Correcte
 const env = getDiscordEnv();
 let slotService;
 let correctedReviewService;
+let fortyTwoTokenProvider;
 const reviewNotificationSettingsStore = new ReviewNotificationSettingsStore();
 
 const client = new Client({
@@ -202,14 +203,22 @@ function getSlotService() {
 }
 
 function createFortyTwoApiClient() {
+  return new FortyTwoApiClient({ tokenProvider: getFortyTwoTokenProvider() });
+}
+
+function getFortyTwoTokenProvider() {
+  if (fortyTwoTokenProvider) {
+    return fortyTwoTokenProvider;
+  }
+
   const fortyTwoEnv = getFortyTwoEnv();
-  const tokenProvider = new UserOAuthTokenProvider({
+  fortyTwoTokenProvider = new UserOAuthTokenProvider({
     clientId: fortyTwoEnv.fortyTwoClientId,
     clientSecret: fortyTwoEnv.fortyTwoClientSecret,
     tokenStore: new FileTokenStore(),
   });
 
-  return new FortyTwoApiClient({ tokenProvider });
+  return fortyTwoTokenProvider;
 }
 
 function getCorrectedReviewService() {
