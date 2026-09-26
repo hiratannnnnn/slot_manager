@@ -1,6 +1,9 @@
 const { groupBookedSlotsIntoReviews } = require('../application/groupBookedSlotsIntoReviews');
 const { formatReview } = require('../discord/formatReview');
 
+const REVIEW_SLOT_CLOSURE_LEAD_MINUTES = 30;
+const REVIEW_SLOT_CLOSURE_TRAILING_MINUTES = 30;
+
 class ReviewChangeDetectorService {
   constructor({
     discordClient,
@@ -75,6 +78,18 @@ class ReviewChangeDetectorService {
       );
 
       for (const review of changes.created) {
+        const closureRange = getReviewSlotClosureRange(review);
+        const closedSlots = await this.slotService.closeSlotsByRange(closureRange);
+
+        console.info('Closed open slots around new review.', {
+          reviewId: review.id,
+          reviewBeginAt: review.beginAt,
+          reviewEndAt: review.endAt,
+          closureBeginAt: closureRange.beginAt,
+          closureEndAt: closureRange.endAt,
+          closedSlotCount: closedSlots.length,
+        });
+
         await this.sendChangeNotification({
           settings,
           title: '新しいレビューが入りました。',
@@ -140,6 +155,24 @@ class ReviewChangeDetectorService {
   }
 }
 
+function getReviewSlotClosureRange(review) {
+  const beginTime = new Date(review.beginAt).getTime();
+  const endTime = new Date(review.endAt).getTime();
+
+  if (Number.isNaN(beginTime) || Number.isNaN(endTime) || beginTime >= endTime) {
+    throw new Error(`Invalid review range: ${review.beginAt} - ${review.endAt}`);
+  }
+
+  return {
+    beginAt: new Date(
+      beginTime - REVIEW_SLOT_CLOSURE_LEAD_MINUTES * 60 * 1000,
+    ).toISOString(),
+    endAt: new Date(
+      endTime + REVIEW_SLOT_CLOSURE_TRAILING_MINUTES * 60 * 1000,
+    ).toISOString(),
+  };
+}
+
 function findReviewChanges(previousReviews, currentReviews, checkedAt) {
   const checkedAtTime = new Date(checkedAt).getTime();
   const previousReviewsWithSharedSlots = new Set();
@@ -179,4 +212,5 @@ function findReviewChanges(previousReviews, currentReviews, checkedAt) {
 module.exports = {
   ReviewChangeDetectorService,
   findReviewChanges,
+  getReviewSlotClosureRange,
 };

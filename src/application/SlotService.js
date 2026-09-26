@@ -2,8 +2,9 @@ const DELETE_INTERVAL_MILLISECONDS = 750;
 const CREATE_INTERVAL_MILLISECONDS = 750;
 
 class SlotService {
-  constructor({ fortyTwoApiClient }) {
+  constructor({ fortyTwoApiClient, logger = console }) {
     this.fortyTwoApiClient = fortyTwoApiClient;
+    this.logger = logger;
   }
 
   async listMySlots() {
@@ -62,16 +63,38 @@ class SlotService {
         const slotBeginTime = new Date(slot.beginAt).getTime();
         const slotEndTime = new Date(slot.endAt).getTime();
 
-        return slotBeginTime >= beginTime && slotEndTime <= endTime;
+        return !slot.hasScaleTeam
+          && slotBeginTime >= beginTime
+          && slotEndTime <= endTime;
       })
       .sort((a, b) => new Date(a.beginAt) - new Date(b.beginAt));
+
+    this.logger.info('Slot deletion range resolved.', {
+      beginAt,
+      endAt,
+      fetchedSlotCount: slots.length,
+      targetSlotCount: targetSlots.length,
+      targetSlots: targetSlots.map(formatSlotLogContext),
+    });
 
     for (const [index, slot] of targetSlots.entries()) {
       if (index > 0) {
         await sleep(DELETE_INTERVAL_MILLISECONDS);
       }
 
-      await this.fortyTwoApiClient.deleteSlot(slot.id);
+      const slotContext = formatSlotLogContext(slot);
+      this.logger.info('Deleting slot.', slotContext);
+
+      try {
+        await this.fortyTwoApiClient.deleteSlot(slot.id);
+        this.logger.info('Deleted slot.', slotContext);
+      } catch (error) {
+        this.logger.error('Failed to delete slot.', {
+          ...slotContext,
+          error: error?.message || String(error),
+        });
+        throw error;
+      }
     }
 
     return targetSlots;
@@ -106,6 +129,15 @@ function formatSlot(slot) {
       hasScaleTeam: Boolean(slot.scale_team),
       scaleTeam: slot.scale_team,
     };
+}
+
+function formatSlotLogContext(slot) {
+  return {
+    slotId: slot.id,
+    beginAt: slot.beginAt,
+    endAt: slot.endAt,
+    hasScaleTeam: slot.hasScaleTeam,
+  };
 }
 
 module.exports = {
