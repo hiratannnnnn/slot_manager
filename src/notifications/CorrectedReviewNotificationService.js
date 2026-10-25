@@ -1,7 +1,5 @@
 const { formatCorrectedReview } = require('../discord/formatCorrectedReview');
 
-const FINAL_REMINDER_LEAD_MINUTES = 5;
-
 class CorrectedReviewNotificationService {
   constructor({
     discordClient,
@@ -12,7 +10,7 @@ class CorrectedReviewNotificationService {
     channelId,
     userId,
     authFailureNotifier,
-    leadMinutes = 42,
+    leadMinutes = 30,
     intervalSeconds = 60,
   }) {
     this.discordClient = discordClient;
@@ -99,15 +97,10 @@ class CorrectedReviewNotificationService {
           continue;
         }
 
-        if (leadMinutes === this.leadMinutes
-          && leadMinutes > FINAL_REMINDER_LEAD_MINUTES
-          && millisecondsUntilBegin <= FINAL_REMINDER_LEAD_MINUTES * 60 * 1000) {
-          continue;
-        }
-
         const notificationKey = `corrected-review-starting:${review.id}:${leadMinutes}m`;
 
-        if (this.notificationStore.has(notificationKey)) {
+        if (this.notificationStore.has(notificationKey)
+          || hasNotifiedCorrectedReview(this.notificationStore.read().notified, review.id)) {
           continue;
         }
 
@@ -131,7 +124,7 @@ class CorrectedReviewNotificationService {
   }
 
   getReminderLeadMinutes() {
-    return [...new Set([this.leadMinutes, FINAL_REMINDER_LEAD_MINUTES])];
+    return [this.leadMinutes];
   }
 
   getSettings() {
@@ -141,6 +134,11 @@ class CorrectedReviewNotificationService {
 
     return channelId && userId ? { channelId, userId } : null;
   }
+}
+
+function hasNotifiedCorrectedReview(notificationKeys, reviewId) {
+  const prefix = `corrected-review-starting:${reviewId}:`;
+  return notificationKeys.some((notificationKey) => notificationKey.startsWith(prefix));
 }
 
 function findCorrectedReviewChanges(previousReviews, currentReviews, checkedAt) {
@@ -160,4 +158,5 @@ function findCorrectedReviewChanges(previousReviews, currentReviews, checkedAt) 
 module.exports = {
   CorrectedReviewNotificationService,
   findCorrectedReviewChanges,
+  hasNotifiedCorrectedReview,
 };

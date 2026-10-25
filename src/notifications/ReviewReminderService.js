@@ -1,7 +1,5 @@
 const { groupBookedSlotsIntoReviews } = require('../application/groupBookedSlotsIntoReviews');
 const { formatReview } = require('../discord/formatReview');
-const FINAL_REMINDER_LEAD_MINUTES = 5;
-
 class ReviewReminderService {
   constructor({
     discordClient,
@@ -11,7 +9,7 @@ class ReviewReminderService {
     channelId,
     userId,
     authFailureNotifier,
-    leadMinutes = 42,
+    leadMinutes = 30,
     intervalSeconds = 300,
   }) {
     this.discordClient = discordClient;
@@ -77,23 +75,14 @@ class ReviewReminderService {
             continue;
           }
 
-          // A bot restarted within the final five minutes should send only the final reminder.
-          if (reminderLeadMinutes === this.leadMinutes
-            && reminderLeadMinutes > FINAL_REMINDER_LEAD_MINUTES
-            && millisecondsUntilBegin <= FINAL_REMINDER_LEAD_MINUTES * 60 * 1000) {
-            continue;
-          }
-
           const notificationKey = `review-starting:${review.id}:${reminderLeadMinutes}m`;
           const legacyNotificationKey = `review-starting:${review.id}`;
 
           if (this.notificationStore.has(notificationKey)
-            || (reminderLeadMinutes === this.leadMinutes && this.notificationStore.has(legacyNotificationKey))
+            || this.notificationStore.has(legacyNotificationKey)
             || hasNotifiedReviewWithSharedSlot(
               this.notificationStore.read().notified,
               review,
-              reminderLeadMinutes,
-              this.leadMinutes,
             )) {
             continue;
           }
@@ -131,7 +120,7 @@ class ReviewReminderService {
   }
 
   getReminderLeadMinutes() {
-    return [...new Set([this.leadMinutes, FINAL_REMINDER_LEAD_MINUTES])];
+    return [this.leadMinutes];
   }
 
   getSettings() {
@@ -150,36 +139,20 @@ class ReviewReminderService {
 function hasNotifiedReviewWithSharedSlot(
   notificationKeys,
   review,
-  reminderLeadMinutes,
-  configuredLeadMinutes,
 ) {
   const currentSlotIds = new Set(review.slotIds.map(String));
 
   return notificationKeys.some((notificationKey) => {
-    const notifiedSlotIds = getNotifiedSlotIds(
-      notificationKey,
-      reminderLeadMinutes,
-      configuredLeadMinutes,
-    );
+    const notifiedSlotIds = getNotifiedSlotIds(notificationKey);
 
     return notifiedSlotIds.some((slotId) => currentSlotIds.has(slotId));
   });
 }
 
-function getNotifiedSlotIds(notificationKey, reminderLeadMinutes, configuredLeadMinutes) {
+function getNotifiedSlotIds(notificationKey) {
   const prefix = 'review-starting:';
-  const reminderSuffix = `:${reminderLeadMinutes}m`;
 
   if (!notificationKey.startsWith(prefix)) {
-    return [];
-  }
-
-  const hasReminderSuffix = notificationKey.endsWith(reminderSuffix);
-  const hasAnotherReminderSuffix = /:\d+m$/.test(notificationKey);
-  const isCompatibleLegacyKey = reminderLeadMinutes === configuredLeadMinutes
-    && !hasAnotherReminderSuffix;
-
-  if (!hasReminderSuffix && !isCompatibleLegacyKey) {
     return [];
   }
 

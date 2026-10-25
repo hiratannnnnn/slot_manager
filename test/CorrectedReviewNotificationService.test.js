@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { findCorrectedReviewChanges } = require('../src/notifications/CorrectedReviewNotificationService');
+const {
+  CorrectedReviewNotificationService,
+  findCorrectedReviewChanges,
+  hasNotifiedCorrectedReview,
+} = require('../src/notifications/CorrectedReviewNotificationService');
 
 const CHECKED_AT = '2026-07-22T09:00:00.000Z';
 
@@ -27,4 +31,19 @@ test('does not report a corrected review as cancelled after it starts', () => {
     created: [],
     cancelled: [],
   });
+});
+
+test('uses one reminder at the default 30-minute lead time', () => {
+  const service = new CorrectedReviewNotificationService({});
+
+  assert.deepEqual(service.getReminderLeadMinutes(), [30]);
+});
+
+test('treats a reminder sent at an old lead time as already sent', () => {
+  assert.equal(hasNotifiedCorrectedReview([
+    'corrected-review-starting:123:42m',
+  ], 123), true);
+  assert.equal(hasNotifiedCorrectedReview([
+    'corrected-review-starting:1234:42m',
+  ], 123), false);
 });
